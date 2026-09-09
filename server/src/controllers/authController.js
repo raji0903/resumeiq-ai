@@ -1,52 +1,46 @@
-const User = require("../models/User");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+import User from "../models/User.js";
+import jwt from "jsonwebtoken";
+
+const generateToken = (userId) => {
+  return jwt.sign(
+    { userId },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+    }
+  );
+};
 
 // REGISTER USER
-const registerUser = async (req, res) => {
+export const registerUser = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // Check if all fields are provided
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        message: "Please provide all fields",
-      });
-    }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Check existing user
+    const existingUser = await User.findOne({
+      email: email.toLowerCase(),
+    });
 
     if (existingUser) {
-      return res.status(400).json({
-        message: "User already exists",
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists",
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     // Create user
+    // Password is automatically hashed by the User model pre-save middleware
     const user = await User.create({
       name,
       email,
-      password: hashedPassword,
+      password,
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
+    const token = generateToken(user._id);
 
     res.status(201).json({
-      message: "User registered successfully",
+      success: true,
+      message: "Account created successfully",
       token,
       user: {
         id: user._id,
@@ -54,62 +48,48 @@ const registerUser = async (req, res) => {
         email: user.email,
       },
     });
-
   } catch (error) {
+    console.error("Register Error:", error);
+
     res.status(500).json({
-      message: "Server error",
-      error: error.message,
+      success: false,
+      message: "Failed to create account",
     });
   }
 };
 
-
 // LOGIN USER
-const loginUser = async (req, res) => {
+export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check fields
-    if (!email || !password) {
-      return res.status(400).json({
-        message: "Please provide email and password",
-      });
-    }
-
-    // Find user
-    const user = await User.findOne({ email });
+    // Password has select:false in User model,
+    // so explicitly select it here.
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+    }).select("+password");
 
     if (!user) {
-      return res.status(400).json({
+      return res.status(401).json({
+        success: false,
         message: "Invalid email or password",
       });
     }
 
-    // Compare password
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
+    const isPasswordCorrect =
+      await user.comparePassword(password);
 
-    if (!isMatch) {
-      return res.status(400).json({
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        success: false,
         message: "Invalid email or password",
       });
     }
 
-    // Generate token
-    const token = jwt.sign(
-      {
-        id: user._id,
-        email: user.email,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
+    const token = generateToken(user._id);
 
     res.status(200).json({
+      success: true,
       message: "Login successful",
       token,
       user: {
@@ -118,17 +98,12 @@ const loginUser = async (req, res) => {
         email: user.email,
       },
     });
-
   } catch (error) {
+    console.error("Login Error:", error);
+
     res.status(500).json({
-      message: "Server error",
-      error: error.message,
+      success: false,
+      message: "Failed to login",
     });
   }
-};
-
-
-module.exports = {
-  registerUser,
-  loginUser,
 };
