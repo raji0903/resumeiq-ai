@@ -8,18 +8,20 @@ import authRoutes from "./routes/authRoutes.js";
 
 const app = express();
 
-// Security headers
+// Security middleware
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
   })
 );
 
-// Allow frontend to communicate with backend
+// CORS configuration
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: ["http://localhost:5173", "http://localhost:5174"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -27,10 +29,10 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Parse cookies
+// Cookie parser
 app.use(cookieParser());
 
-// Rate limiting
+// Rate limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -53,4 +55,5 @@ app.get("/api/health", (req, res) => {
 // Authentication routes
 app.use("/api/auth", authRoutes);
 
+// IMPORTANT
 export default app;
